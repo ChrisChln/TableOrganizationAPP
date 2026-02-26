@@ -78,9 +78,41 @@ h2 {
   margin: 0;
 }
 
+.sheet-tag {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 500;
+}
+
 .panel-actions {
   display: flex;
   gap: 8px;
+}
+
+.sheet-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sheet-tab {
+  width: auto;
+  min-width: 80px;
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--text);
+}
+
+.sheet-tab:hover {
+  background: #f8fafc;
+}
+
+.sheet-tab.active {
+  border-color: #f29c9c;
+  background: #fff5f5;
+  color: var(--primary);
 }
 
 .panel-actions button {

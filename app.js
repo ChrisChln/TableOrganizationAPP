@@ -6,11 +6,20 @@ const resultTable = document.getElementById("resultTable");
 const copyBtn = document.getElementById("copyBtn");
 const exportBtn = document.getElementById("exportBtn");
 const mainContainer = document.getElementById("mainContainer");
+const currentSheetName = document.getElementById("currentSheetName");
+
+const sheetTabsPanel = document.getElementById("sheetTabsPanel");
+const sheetTabs = document.getElementById("sheetTabs");
 
 const fieldModal = document.getElementById("fieldModal");
 const fieldOptions = document.getElementById("fieldOptions");
 const selectAllFields = document.getElementById("selectAllFields");
 const confirmFieldsBtn = document.getElementById("confirmFieldsBtn");
+
+let workbookRowsBySheet = {};
+let processedSheetCache = {};
+let sheetHeaderSelection = {};
+let activeSheetName = "";
 
 let allRows = [];
 let allHeaders = [];
@@ -19,10 +28,35 @@ let currentRows = [];
 let headers = [];
 let keywordFilterState = {};
 let sortState = { key: "", direction: "asc" };
-let cleanupInfo = { mergedColumns: 0, removedRows: 0, removedEmptyColumns: 0, expandedRows: 0 };
 
 fileInput.addEventListener("click", () => {
   fileInput.value = "";
+});
+
+fileInput.addEventListener("change", async (event) => {
+  const file = event.target.files?.[0];
+  if (!file) {
+    return;
+  }
+
+  try {
+    const parsed = await parseWorkbook(file);
+    if (!parsed.sheetNames.length) {
+      alert("未检测到工作表。");
+      return;
+    }
+
+    workbookRowsBySheet = parsed.rowsBySheet;
+    processedSheetCache = {};
+    sheetHeaderSelection = {};
+    mainContainer.classList.remove("is-empty");
+
+    renderSheetTabs(parsed.sheetNames);
+    activateSheet(parsed.sheetNames[0]);
+  } catch (error) {
+    console.error(error);
+    alert("文件解析失败，请确认文件格式正确。");
+  }
 });
 
 copyBtn.addEventListener("click", async () => {
@@ -33,9 +67,8 @@ copyBtn.addEventListener("click", async () => {
     headers.join("\t"),
     ...currentRows.map((row) => headers.map((header) => row[header] ?? "").join("\t")),
   ];
-  const text = lines.join("\n");
   try {
-    await navigator.clipboard.writeText(text);
+    await navigator.clipboard.writeText(lines.join("\n"));
     copyBtn.textContent = "已复制";
     setTimeout(() => {
       copyBtn.textContent = "复制";
@@ -60,41 +93,8 @@ exportBtn.addEventListener("click", () => {
   const sheet = XLSX.utils.json_to_sheet(exportData, { header: headers });
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, sheet, "结果");
-  XLSX.writeFile(wb, "整理结果.xlsx");
-});
-
-fileInput.addEventListener("change", async (event) => {
-  const file = event.target.files?.[0];
-  if (!file) {
-    return;
-  }
-
-  try {
-    const rows = await parseFile(file);
-    if (!rows.length) {
-      alert("未读取到有效数据，请检查表格内容。");
-      return;
-    }
-
-    const merged = mergeDuplicateColumns(rows);
-    allHeaders = merged.headers;
-    allRows = deduplicateRows(merged.rows, allHeaders);
-
-    cleanupInfo = {
-      mergedColumns: merged.mergedColumns,
-      removedRows: merged.rows.length - allRows.length,
-      removedEmptyColumns: merged.removedEmptyColumns,
-      expandedRows: Math.max(0, merged.rows.length - rows.length),
-    };
-
-    mainContainer.classList.remove("is-empty");
-    keywordFiltersPanel.hidden = true;
-    tablePanel.hidden = true;
-    openFieldModal(allHeaders);
-  } catch (error) {
-    console.error(error);
-    alert("文件解析失败，请确认文件格式正确。");
-  }
+  const safeName = (activeSheetName || "结果").replace(/[\\/:*?"<>|]/g, "_");
+  XLSX.writeFile(wb, `整理结果_${safeName}.xlsx`);
 });
 
 selectAllFields.addEventListener("change", () => {
@@ -114,6 +114,68 @@ confirmFieldsBtn.addEventListener("click", () => {
     return;
   }
 
+  sheetHeaderSelection[activeSheetName] = selectedHeaders;
+  applySelectedHeadersForActiveSheet(selectedHeaders);
+  fieldModal.hidden = true;
+});
+
+function renderSheetTabs(sheetNames) {
+  sheetTabs.innerHTML = "";
+  sheetNames.forEach((name) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "sheet-tab";
+    btn.textContent = name;
+    btn.addEventListener("click", () => activateSheet(name));
+    sheetTabs.appendChild(btn);
+  });
+  sheetTabsPanel.hidden = sheetNames.length <= 1;
+}
+
+function activateSheet(sheetName) {
+  activeSheetName = sheetName;
+  currentSheetName.textContent = sheetName ? `（${sheetName}）` : "";
+
+  Array.from(sheetTabs.querySelectorAll(".sheet-tab")).forEach((btn) => {
+    btn.classList.toggle("active", btn.textContent === sheetName);
+  });
+
+  const processed = getProcessedSheetData(sheetName);
+  if (!processed) {
+    alert("该工作表无可用数据。");
+    return;
+  }
+
+  allHeaders = processed.headers;
+  allRows = processed.rows;
+
+  const savedHeaders = sheetHeaderSelection[sheetName];
+  if (savedHeaders && savedHeaders.length) {
+    const validHeaders = savedHeaders.filter((h) => allHeaders.includes(h));
+    applySelectedHeadersForActiveSheet(validHeaders.length ? validHeaders : allHeaders);
+  } else {
+    openFieldModal(allHeaders);
+  }
+}
+
+function getProcessedSheetData(sheetName) {
+  if (processedSheetCache[sheetName]) {
+    return processedSheetCache[sheetName];
+  }
+
+  const rows = workbookRowsBySheet[sheetName] || [];
+  if (!rows.length) {
+    return null;
+  }
+
+  const merged = mergeDuplicateColumns(rows);
+  const dedupedRows = deduplicateRows(merged.rows, merged.headers);
+  const result = { headers: merged.headers, rows: dedupedRows };
+  processedSheetCache[sheetName] = result;
+  return result;
+}
+
+function applySelectedHeadersForActiveSheet(selectedHeaders) {
   headers = selectedHeaders;
   originalRows = allRows
     .map((row) => {
@@ -132,10 +194,9 @@ confirmFieldsBtn.addEventListener("click", () => {
   renderKeywordFilters();
   renderTable(currentRows);
 
-  fieldModal.hidden = true;
   keywordFiltersPanel.hidden = false;
   tablePanel.hidden = false;
-});
+}
 
 function openFieldModal(listHeaders) {
   fieldOptions.innerHTML = "";
@@ -165,19 +226,25 @@ function openFieldModal(listHeaders) {
   fieldModal.hidden = false;
 }
 
-function parseFile(file) {
+function parseWorkbook(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, { type: "array" });
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(sheet, {
-          defval: "",
-          raw: false,
+        const sheetNames = workbook.SheetNames || [];
+        const rowsBySheet = {};
+
+        sheetNames.forEach((name) => {
+          const sheet = workbook.Sheets[name];
+          rowsBySheet[name] = XLSX.utils.sheet_to_json(sheet, {
+            defval: "",
+            raw: false,
+          });
         });
-        resolve(rows);
+
+        resolve({ sheetNames, rowsBySheet });
       } catch (err) {
         reject(err);
       }
@@ -320,9 +387,7 @@ function renderKeywordFilters() {
     input.type = "text";
     input.placeholder = "";
 
-    const suggestValues = uniqueValues.includes("")
-      ? [...sortedValues, "(空白)"]
-      : sortedValues;
+    const suggestValues = uniqueValues.includes("") ? [...sortedValues, "(空白)"] : sortedValues;
 
     input.addEventListener("input", () => {
       keywordFilterState[header] = input.value.trim();
@@ -349,9 +414,7 @@ function renderKeywordFilters() {
 
 function renderSuggestList(header, input, suggestBox, values) {
   const keyword = input.value.trim().toLowerCase();
-  const matched = values
-    .filter((value) => String(value).toLowerCase().includes(keyword))
-    .slice(0, 200);
+  const matched = values.filter((value) => String(value).toLowerCase().includes(keyword)).slice(0, 200);
 
   suggestBox.innerHTML = "";
   if (!matched.length) {
@@ -426,7 +489,6 @@ function renderTable(rows) {
     body.appendChild(tr);
   });
   resultTable.appendChild(body);
-
 }
 
 function toggleSort(header) {
@@ -455,9 +517,11 @@ function sortRows(rows) {
     if (bothNumber) {
       return (na - nb) * dir;
     }
-    return String(va).localeCompare(String(vb), "zh-Hans-CN", {
-      numeric: true,
-      sensitivity: "base",
-    }) * dir;
+    return (
+      String(va).localeCompare(String(vb), "zh-Hans-CN", {
+        numeric: true,
+        sensitivity: "base",
+      }) * dir
+    );
   });
 }

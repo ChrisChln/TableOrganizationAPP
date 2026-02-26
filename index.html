@@ -12,6 +12,10 @@
       <input id="fileInput" type="file" accept=".xlsx,.xls,.csv">
     </section>
 
+    <section class="panel" id="sheetTabsPanel" hidden>
+      <div id="sheetTabs" class="sheet-tabs"></div>
+    </section>
+
     <section class="panel" id="keywordFiltersPanel" hidden>
       <h2>字段筛选</h2>
       <div id="keywordFilters" class="filters-grid"></div>
@@ -19,7 +23,7 @@
 
     <section class="panel" id="tablePanel" hidden>
       <div class="panel-head">
-        <h2>结果预览</h2>
+        <h2>结果预览 <span id="currentSheetName" class="sheet-tag"></span></h2>
         <div class="panel-actions">
           <button id="copyBtn" type="button">复制</button>
           <button id="exportBtn" type="button">导出</button>
