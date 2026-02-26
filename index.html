@@ -1,0 +1,51 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main class="container is-empty" id="mainContainer">
+    <section class="panel" id="uploadPanel">
+      <label for="fileInput" class="label">上传文件</label>
+      <input id="fileInput" type="file" accept=".xlsx,.xls,.csv">
+    </section>
+
+    <section class="panel" id="keywordFiltersPanel" hidden>
+      <h2>字段筛选</h2>
+      <div id="keywordFilters" class="filters-grid"></div>
+    </section>
+
+    <section class="panel" id="tablePanel" hidden>
+      <div class="panel-head">
+        <h2>结果预览</h2>
+        <div class="panel-actions">
+          <button id="copyBtn" type="button">复制</button>
+          <button id="exportBtn" type="button">导出</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table id="resultTable"></table>
+      </div>
+    </section>
+  </main>
+
+  <div id="fieldModal" class="modal" hidden>
+    <div class="modal-card">
+      <h2>选择需要的字段</h2>
+      <label class="modal-all">
+        <input type="checkbox" id="selectAllFields" checked>
+        全选
+      </label>
+      <div id="fieldOptions" class="field-options"></div>
+      <div class="modal-actions">
+        <button id="confirmFieldsBtn" type="button">确认</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
